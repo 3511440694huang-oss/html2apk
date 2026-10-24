@@ -1,0 +1,1 @@
+nested asset loaded OK — this file lives at dist/nested.txt next to the non-root entry page.

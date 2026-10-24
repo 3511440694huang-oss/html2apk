@@ -1,0 +1,5 @@
+{
+  "ok": true,
+  "message": "ES module loaded and data.json fetched from the APK assets",
+  "items": [1, 2, 3]
+}

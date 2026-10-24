@@ -11,16 +11,23 @@ app/build/
 local.properties
 
 # 引擎资产（构建时从工具链生成）
-app/src/main/assets/engine/aapt2
-app/src/main/assets/engine/zipalign
 app/src/main/assets/engine/android.jar
 app/src/main/assets/engine/template.dex
 app/libs/apksig-8.5.2.jar
 
-# 壳编译产物 / 测试 APK
+# 壳编译产物 / 测试 APK / 发布归档
 shell-tpl/out/
 shell-tpl/test/*.apk
-# 本地 git 操作备份
+tests/.build/
+tests/out/
+*.apk
+*.log
+__pycache__/
+.DS_Store
 .backup/
-# 本地发布归档（APK 不入库）
 04-备份归档/
+*.jks
+*.keystore
+
+# Kotlin
+.kotlin/

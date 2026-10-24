@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fixture: blank (intentional uncaught error, empty body)</title>
+<style>
+  /* Deliberately no visible content: body must stay empty. */
+  html, body { margin: 0; height: 100%; background: #0B1020; }
+</style>
+<script>
+  // INTENTIONAL uncaught error: no window.onerror handler, no try/catch.
+  // Manual check: page stays blank (dark), app does not crash; the error should
+  // appear in the WebView console / logcat, and the shell should keep working.
+  setTimeout(function () {
+    throw new Error("HT2A_INTENTIONAL_UNCAUGHT");
+  }, 100);
+
+  // Also throw synchronously during head parsing, to exercise parser-level errors.
+  (function () {
+    var missing = null;
+    missing.someProperty; // TypeError: Cannot read properties of null
+  })();
+</script>
+</head>
+<body></body>
+</html>

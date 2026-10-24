@@ -9,20 +9,33 @@ ANDROID_JAR="${1:?usage: build-dex.sh <android.jar> <d8>}"
 D8="${2:?usage: build-dex.sh <android.jar> <d8>}"
 OUT="$HERE/out"
 
+# 允许用环境变量覆盖工具链（设备上没有 java 在 PATH 里）
+if [ -z "${JAVA_HOME:-}" ] && [ -x /data/data/com.dsharnessmobile.shell/files/usr/lib/jvm/java-17-openjdk/bin/javac ]; then
+  JAVA_HOME=/data/data/com.dsharnessmobile.shell/files/usr/lib/jvm/java-17-openjdk
+fi
+JAVAC="${JAVAC:-${JAVA_HOME:+$JAVA_HOME/bin/javac}}"
+JAVAC="${JAVAC:-javac}"
+export JAVA_HOME="${JAVA_HOME:-}"
+if [ -n "$JAVA_HOME" ]; then
+  export PATH="$JAVA_HOME/bin:$PATH"
+fi
+
 rm -rf "$OUT"
-mkdir -p "$OUT/classes"
+mkdir -p "$OUT/classes" "$OUT/gen/com/html2apk/shell"
 
-echo "[1/3] javac..."
-javac -source 8 -target 8 -bootclasspath "$ANDROID_JAR" \
-    -d "$OUT/classes" \
-    "$HERE/src/com/html2apk/shell/MainActivity.java" \
-    "$HERE/src/com/html2apk/shell/Config.java"
+echo "[1/4] generating Shim.java from shim.js..."
+python3 "$HERE/gen-shim.py" > "$OUT/gen/com/html2apk/shell/Shim.java"
+wc -c "$OUT/gen/com/html2apk/shell/Shim.java"
 
-echo "[2/3] d8..."
-# 收集所有编译出的 .class（含匿名内部类 MainActivity$1.class 等）
+echo "[2/4] javac..."
+SOURCES=$(find "$HERE/src" -name '*.java' | sort | tr '\n' ' ')
+"$JAVAC" -encoding UTF-8 -source 8 -target 8 -bootclasspath "$ANDROID_JAR" \
+    -Xlint:-options -d "$OUT/classes" $SOURCES "$OUT/gen/com/html2apk/shell/Shim.java"
+
+echo "[3/4] d8..."
 CLASSES=$(find "$OUT/classes" -name '*.class' | tr '\n' ' ')
 bash "$D8" --release --lib "$ANDROID_JAR" --min-api 24 \
     --output "$OUT" $CLASSES
 
-echo "[3/3] done: $OUT/classes.dex"
+echo "[4/4] done: $OUT/classes.dex"
 ls -la "$OUT/classes.dex"

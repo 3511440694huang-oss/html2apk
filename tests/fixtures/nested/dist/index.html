@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fixture: nested</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; background: #0B1020; color: #E8EEF9;
+         font-family: system-ui, -apple-system, sans-serif; }
+  h1 { font-size: 15px; color: #7F92B3; font-weight: 600; margin: 0 0 12px; }
+  .status { font-size: 44px; font-weight: 800; line-height: 1.1; text-align: center;
+            padding: 16px 20px; border-radius: 14px; background: #16203A;
+            border: 2px solid #2A3A5F; color: #FFD479; margin: 0 0 12px; }
+  .status.pass { color: #7FFFB2; background: #0F2A1D; border-color: #2F7D55; }
+  .status.fail { color: #FF9B9B; background: #2C1114; border-color: #8E3339; }
+  .detail { font-size: 14px; line-height: 1.65; color: #B9C7DE; white-space: pre-wrap;
+            word-break: break-word; margin: 0 0 10px; }
+  pre { margin: 14px 0 0; padding: 12px; background: #070B16; border: 1px solid #1C2740;
+        border-radius: 10px; color: #8FA3C4; font-size: 11px; line-height: 1.5;
+        white-space: pre-wrap; word-break: break-all; }
+</style>
+</head>
+<body>
+  <h1>HTML2APK fixture · nested（入口在 dist/，不是 assets 根）</h1>
+  <div id="status" class="status">WAIT</div>
+  <div id="detail" class="detail">入口页已由 ht2a.config 的 entryFile=dist/index.html 加载。
+正在 fetch 同目录的 nested.txt …</div>
+  <pre id="log"></pre>
+
+<script>
+(function () {
+  "use strict";
+
+  var statusEl = document.getElementById("status");
+  var detailEl = document.getElementById("detail");
+  var logEl = document.getElementById("log");
+
+  function log(msg) { logEl.textContent += msg + "\n"; }
+
+  log("location.href = " + location.href);
+  log("expected entry = dist/index.html");
+
+  fetch("./nested.txt", { cache: "no-store" }).then(function (response) {
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    return response.text();
+  }).then(function (text) {
+    var onNestedPath = /\/dist\/index\.html$/.test(location.pathname);
+    statusEl.className = "status " + (onNestedPath ? "pass" : "fail");
+    statusEl.textContent = onNestedPath ? "PASS" : "FAIL";
+    detailEl.textContent =
+        (onNestedPath ? "入口路径正确：dist/index.html" : "入口路径异常：" + location.pathname) + "\n" +
+        "fetch('./nested.txt') 成功，共 " + text.length + " chars。";
+    log("nested.txt: " + JSON.stringify(text));
+  }).catch(function (error) {
+    statusEl.className = "status fail";
+    statusEl.textContent = "FAIL";
+    detailEl.textContent = "fetch('./nested.txt') 失败：\n" + error.name + ": " + error.message;
+    log("FAIL: " + error.name + ": " + error.message);
+  });
+})();
+</script>
+</body>
+</html>

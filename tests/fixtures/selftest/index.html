@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HTML2APK 壳自检</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 18px calc(24px + env(safe-area-inset-bottom));
+         background: #0B1020; color: #E8EEF9; font-family: system-ui, -apple-system, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 6px; }
+  p.lead { color: #9FB0CC; font-size: 13px; line-height: 1.65; margin: 0 0 20px; }
+  .badge { display: inline-block; font: 11px/1.4 monospace; letter-spacing: .12em;
+           color: #7FD1A0; border: 1px solid #2A3A5F; background: #16203A;
+           border-radius: 6px; padding: 4px 8px; margin-bottom: 18px; }
+  a.item { display: block; text-decoration: none; color: inherit; background: #131C30;
+           border: 1px solid #263757; border-radius: 12px; padding: 14px 16px; margin: 0 0 12px; }
+  a.item:active { background: #1B2A4A; }
+  a.item b { display: block; font-size: 15px; margin-bottom: 4px; color: #DCE8FF; }
+  a.item span { display: block; font-size: 12px; color: #8FA3C4; line-height: 1.55; }
+  .ok { color: #7FD1A0; }
+  footer { margin-top: 20px; font-size: 11px; color: #64748B; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <h1>HTML2APK 壳自检</h1>
+  <div class="badge">v1.2.0 · SHELL SELF TEST</div>
+  <p class="lead">每个页面验证一类历史问题。进入后按提示点按钮；返回即可继续下一项。</p>
+
+  <a class="item" href="save-json/">
+    <b>1. 保存 JSON / 文件</b>
+    <span>生成约 250KB JSON，触发 &lt;a download&gt; 与 showSaveFilePicker，保存到 下载/HTML2APK。</span>
+  </a>
+  <a class="item" href="file-input/">
+    <b>2. 文件选择按钮</b>
+    <span>&lt;input type=file&gt; 打开系统文件管理器，读取所选文件内容。</span>
+  </a>
+  <a class="item" href="big-storage/">
+    <b>3. 8MB 数据持久化</b>
+    <span>写入 8MB localStorage，刷新后仍能读回（旧壳会因 5MB 配额丢失）。</span>
+  </a>
+  <a class="item" href="esm/">
+    <b>4. ES Module / fetch</b>
+    <span>type=module + fetch(data.json)，验证新壳的 HTTPS 资源域修复白屏。</span>
+  </a>
+  <a class="item" href="nested/dist/">
+    <b>5. 子目录入口</b>
+    <span>入口位于 assets/nested/dist/index.html，验证相对路径与资源加载。</span>
+  </a>
+  <a class="item" href="blank/">
+    <b>6. 空白页诊断</b>
+    <span>故意制造脚本错误与空 body，验证错误横幅与诊断入口。</span>
+  </a>
+
+  <footer>
+    产物壳 1.2.0 · 下载目录：Download/HTML2APK<br>
+    若某项失败，请记录页面上的 PASS/FAIL 文案与机型反馈给开发者。
+  </footer>
+</body>
+</html>

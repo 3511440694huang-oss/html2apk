@@ -12,26 +12,28 @@ android {
     minSdk = 26
     // targetSdk 34: 与 dsh-mobile-apk 一致，避免 Android 15+ 对 exec app-data ELF 的限制
     targetSdk = 34
-    versionCode = 6
-    versionName = "1.1.1"
+    versionCode = 7
+    versionName = "1.2.0"
   }
 
   buildFeatures {
     buildConfig = true
   }
 
-  androidResources {
-    // 引擎数据资产不压缩，保证 exec 可用
-    noCompress += listOf("so", "dex", "jar", "arsc", "png")
+  defaultConfig {
+    ndk {
+      // 构建引擎只有 arm64-v8a 的 PIE aapt2；显式限制 ABI 避免装到不支持的设备
+      abiFilters += listOf("arm64-v8a")
+    }
   }
 
   packaging {
     jniLibs {
       // 强制 native lib 解压为实体文件（extractNativeLibs=true）。
-      // aapt2/zipalign 需要从 nativeLibraryDir exec，必须落盘。
+      // aapt2 需要从 nativeLibraryDir exec，必须落盘。
       useLegacyPackaging = true
-      // 静态链接的引擎二进制，防止 AGP strip 破坏
-      keepDebugSymbols += listOf("**/libaapt2.so", "**/libzipalign.so")
+      // 动态链接的 Termux aapt2，防止 AGP strip 破坏
+      keepDebugSymbols += listOf("**/libaapt2.so")
     }
   }
 

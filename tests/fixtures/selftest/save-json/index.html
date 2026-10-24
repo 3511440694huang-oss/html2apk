@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fixture: save-json</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; background: #0B1020; color: #E8EEF9;
+         font-family: system-ui, -apple-system, sans-serif; }
+  h1 { font-size: 15px; color: #7F92B3; font-weight: 600; margin: 0 0 12px; }
+  .status { font-size: 44px; font-weight: 800; line-height: 1.1; text-align: center;
+            padding: 16px 20px; border-radius: 14px; background: #16203A;
+            border: 2px solid #2A3A5F; color: #FFD479; margin: 0 0 12px; }
+  .status.pass { color: #7FFFB2; background: #0F2A1D; border-color: #2F7D55; }
+  .status.fail { color: #FF9B9B; background: #2C1114; border-color: #8E3339; }
+  .detail { font-size: 14px; line-height: 1.65; color: #B9C7DE; white-space: pre-wrap;
+            word-break: break-word; margin: 0 0 16px; }
+  .buttons { display: flex; flex-direction: column; gap: 10px; }
+  button { min-height: 52px; font-size: 16px; font-weight: 600; border-radius: 10px;
+           border: 1px solid #35507F; background: #1B2A4A; color: #DCE8FF; padding: 8px 14px; }
+  button:active { background: #243B67; }
+  pre { margin: 18px 0 0; padding: 12px; background: #070B16; border: 1px solid #1C2740;
+        border-radius: 10px; color: #8FA3C4; font-size: 11px; line-height: 1.5;
+        white-space: pre-wrap; word-break: break-all; max-height: 240px; overflow: auto; }
+</style>
+</head>
+<body>
+  <h1>HTML2APK fixture · save-json</h1>
+  <div id="status" class="status">WAIT</div>
+  <div id="detail" class="detail">正在生成 JSON payload…</div>
+
+  <div class="buttons">
+    <button id="btn-picker" type="button">② showSaveFilePicker 保存（若可用）</button>
+    <button id="btn-bridge" type="button">③ 调用 HT2A.saveBase64（若可用）</button>
+    <button id="btn-anchor" type="button">① 再次触发 &lt;a download&gt;</button>
+  </div>
+  <pre id="log"></pre>
+
+<script>
+(function () {
+  "use strict";
+
+  var statusEl = document.getElementById("status");
+  var detailEl = document.getElementById("detail");
+  var logEl = document.getElementById("log");
+  var lines = [];
+
+  function log(msg) {
+    lines.push(new Date().toISOString().slice(11, 19) + "  " + msg);
+    logEl.textContent = lines.join("\n");
+  }
+
+  function setStatus(kind, title, detail) {
+    statusEl.className = "status " + kind;
+    statusEl.textContent = title;
+    detailEl.textContent = detail;
+  }
+
+  function makePayload() {
+    // Deterministic ~250 KB JSON, no network and no crypto needed.
+    var words = "HTML2APK save-json deterministic payload 0123456789 " +
+                "the quick brown fox jumps over the lazy dog. ";
+    var items = [];
+    for (var i = 0; i < 700; i++) {
+      items.push({
+        id: i,
+        name: "item-" + i,
+        note: words.repeat(3),
+        value: (i * 2654435761) >>> 0
+      });
+    }
+    return JSON.stringify({ version: 1, count: items.length, items: items });
+  }
+
+  var json;
+  try {
+    json = makePayload();
+  } catch (e) {
+    setStatus("fail", "FAIL", "生成 JSON 失败: " + e.name + ": " + e.message);
+    return;
+  }
+  var bytes = new Blob([json], { type: "application/json" }).size;
+  var sizeLabel = (bytes / 1024).toFixed(1) + " KB";
+  log("payload: " + bytes + " bytes (" + sizeLabel + "), " + json.length + " chars");
+
+  var anchorState = "未触发";
+  var pickerState = (typeof window.showSaveFilePicker === "function")
+      ? "存在（需点按钮）" : "不存在";
+  var bridgeState = "未调用";
+
+  function summary() {
+    return "payload: " + sizeLabel + " (" + bytes + " bytes)\n" +
+           "<a download>: " + anchorState + "\n" +
+           "showSaveFilePicker: " + pickerState + "\n" +
+           "HT2A.saveBase64: " + bridgeState;
+  }
+
+  function triggerAnchor() {
+    var blob = new Blob([json], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "ht2a-save-json.json";
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    anchorState = "已 click()，blob URL " + url.slice(0, 20) + "…（请在下载目录确认文件）";
+    log("anchor.download click() triggered, blob=" + url);
+  }
+
+  function toBase64(str) {
+    var bytes = new TextEncoder().encode(str);
+    var bin = "";
+    var chunk = 0x8000;
+    for (var i = 0; i < bytes.length; i += chunk) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(bin);
+  }
+
+  function findSaveBridge() {
+    if (window.HT2A && typeof window.HT2A.saveBase64 === "function") {
+      return { name: "HT2A", obj: window.HT2A };
+    }
+    if (window.HTML2APK && typeof window.HTML2APK.saveBase64 === "function") {
+      return { name: "HTML2APK", obj: window.HTML2APK };
+    }
+    return null;
+  }
+
+  // Current shell contract is saveBase64(name, mime, base64); older/simpler
+  // bridges may accept (name, base64). Try the richer call first.
+  function callSaveBase64(bridge, name, b64) {
+    var firstError = null;
+    try {
+      return { args: 3, value: bridge.saveBase64(name, "application/json", b64) };
+    } catch (e) {
+      firstError = e;
+    }
+    try {
+      return { args: 2, value: bridge.saveBase64(name, b64) };
+    } catch (e) {
+      throw firstError || e;
+    }
+  }
+
+  try {
+    triggerAnchor();
+    setStatus("pass", "PASS", summary());
+  } catch (e) {
+    anchorState = "异常: " + e.name + ": " + e.message;
+    setStatus("fail", "FAIL", summary());
+    log("anchor exception: " + e.name + ": " + e.message);
+  }
+
+  document.getElementById("btn-anchor").addEventListener("click", function () {
+    try {
+      triggerAnchor();
+      setStatus("pass", "PASS", summary());
+    } catch (e) {
+      anchorState = "异常: " + e.name + ": " + e.message;
+      setStatus("fail", "FAIL", summary());
+      log("anchor exception: " + e.name + ": " + e.message);
+    }
+  });
+
+  document.getElementById("btn-picker").addEventListener("click", function () {
+    if (typeof window.showSaveFilePicker !== "function") {
+      pickerState = "不存在（WebView 不支持此 API，属预期）";
+      setStatus("pass", "PASS", summary());
+      log("showSaveFilePicker unavailable");
+      return;
+    }
+    window.showSaveFilePicker({
+      suggestedName: "ht2a-save-json.json",
+      types: [{ description: "JSON", accept: { "application/json": [".json"] } }]
+    }).then(function (handle) {
+      return handle.createWritable().then(function (writable) {
+        return writable.write(json).then(function () { return writable.close(); });
+      });
+    }).then(function () {
+      pickerState = "写入成功";
+      setStatus("pass", "PASS", summary());
+      log("showSaveFilePicker write OK");
+    }).catch(function (e) {
+      pickerState = "异常: " + e.name + ": " + e.message;
+      setStatus("fail", "FAIL", summary());
+      log("showSaveFilePicker exception: " + e.name + ": " + e.message);
+    });
+  });
+
+  document.getElementById("btn-bridge").addEventListener("click", function () {
+    var bridge = findSaveBridge();
+    if (!bridge) {
+      bridgeState = "不存在（壳未暴露 saveBase64）";
+      setStatus("pass", "PASS", summary());
+      log("no HT2A/HTML2APK.saveBase64 bridge");
+      return;
+    }
+    try {
+      var b64 = toBase64(json);
+      var call = callSaveBase64(bridge.obj, "ht2a-save-json.json", b64);
+      var value = String(call.value);
+      bridgeState = bridge.name + ".saveBase64(" + call.args + " 参数) 返回: " + value;
+      var parsed = null;
+      try { parsed = JSON.parse(value); } catch (e) { parsed = null; }
+      var ok = !(parsed && parsed.ok === false);
+      setStatus(ok ? "pass" : "fail", ok ? "PASS" : "FAIL", summary());
+      log("bridge call " + (ok ? "OK" : "FAILED") + ": " + bridgeState);
+    } catch (e) {
+      bridgeState = "异常: " + e.name + ": " + e.message;
+      setStatus("fail", "FAIL", summary());
+      log("bridge exception: " + e.name + ": " + e.message);
+    }
+  });
+})();
+</script>
+</body>
+</html>

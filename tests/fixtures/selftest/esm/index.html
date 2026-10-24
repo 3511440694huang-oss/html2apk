@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fixture: esm</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; background: #0B1020; color: #E8EEF9;
+         font-family: system-ui, -apple-system, sans-serif; }
+  h1 { font-size: 15px; color: #7F92B3; font-weight: 600; margin: 0 0 12px; }
+  .status { font-size: 44px; font-weight: 800; line-height: 1.1; text-align: center;
+            padding: 16px 20px; border-radius: 14px; background: #16203A;
+            border: 2px solid #2A3A5F; color: #FFD479; margin: 0 0 12px; }
+  .status.pass { color: #7FFFB2; background: #0F2A1D; border-color: #2F7D55; }
+  .status.fail { color: #FF9B9B; background: #2C1114; border-color: #8E3339; }
+  .detail { font-size: 14px; line-height: 1.65; color: #B9C7DE; white-space: pre-wrap;
+            word-break: break-word; margin: 0 0 10px; }
+  pre { margin: 14px 0 0; padding: 12px; background: #070B16; border: 1px solid #1C2740;
+        border-radius: 10px; color: #8FA3C4; font-size: 11px; line-height: 1.5;
+        white-space: pre-wrap; word-break: break-all; }
+</style>
+</head>
+<body>
+  <h1>HTML2APK fixture · esm（&lt;script type="module"&gt; + fetch data.json）</h1>
+  <div id="status" class="status">WAIT</div>
+  <div id="detail" class="detail">等待 app.js（ES module）执行并 fetch ./data.json …</div>
+  <pre id="log">entry: <span id="loc"></span></pre>
+
+<script>
+  // Classic-script watchdog: if the module never calls back, show a visible FAIL.
+  document.getElementById("loc").textContent = location.pathname;
+  window.__esmDone = false;
+  window.setTimeout(function () {
+    if (!window.__esmDone) {
+      var s = document.getElementById("status");
+      s.className = "status fail";
+      s.textContent = "FAIL";
+      document.getElementById("detail").textContent =
+          "6 秒内 app.js (type=module) 未完成执行。\n" +
+          "可能原因：模块未加载 / MIME 不对 / 脚本语法错误 / fetch 卡住。";
+    }
+  }, 6000);
+</script>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

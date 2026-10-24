@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fixture: big-storage</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; background: #0B1020; color: #E8EEF9;
+         font-family: system-ui, -apple-system, sans-serif; }
+  h1 { font-size: 15px; color: #7F92B3; font-weight: 600; margin: 0 0 12px; }
+  .status { font-size: 44px; font-weight: 800; line-height: 1.1; text-align: center;
+            padding: 16px 20px; border-radius: 14px; background: #16203A;
+            border: 2px solid #2A3A5F; color: #FFD479; margin: 0 0 12px; }
+  .status.pass { color: #7FFFB2; background: #0F2A1D; border-color: #2F7D55; }
+  .status.fail { color: #FF9B9B; background: #2C1114; border-color: #8E3339; }
+  .detail { font-size: 14px; line-height: 1.65; color: #B9C7DE; white-space: pre-wrap;
+            word-break: break-word; margin: 0 0 16px; }
+  .buttons { display: flex; flex-direction: column; gap: 10px; }
+  button { min-height: 52px; font-size: 16px; font-weight: 600; border-radius: 10px;
+           border: 1px solid #35507F; background: #1B2A4A; color: #DCE8FF; padding: 8px 14px; }
+  button:active { background: #243B67; }
+  pre { margin: 18px 0 0; padding: 12px; background: #070B16; border: 1px solid #1C2740;
+        border-radius: 10px; color: #8FA3C4; font-size: 11px; line-height: 1.5;
+        white-space: pre-wrap; word-break: break-all; max-height: 220px; overflow: auto; }
+</style>
+</head>
+<body>
+  <h1>HTML2APK fixture · big-storage（localStorage 8 MiB）</h1>
+  <div id="status" class="status">WAIT</div>
+  <div id="detail" class="detail">正在构造 8 MiB 确定性字符串…</div>
+
+  <div class="buttons">
+    <button id="btn-write" type="button">写入 8 MiB 到 localStorage["big"]</button>
+    <button id="btn-read" type="button">重新读取并校验</button>
+    <button id="btn-clear" type="button">清除 big / small</button>
+  </div>
+  <pre id="log"></pre>
+
+<script>
+(function () {
+  "use strict";
+
+  var BIG_KEY = "big";
+  var SMALL_KEY = "small";
+  var BIG_SIZE = 8 * 1024 * 1024;
+
+  var statusEl = document.getElementById("status");
+  var detailEl = document.getElementById("detail");
+  var logEl = document.getElementById("log");
+
+  function log(msg) {
+    logEl.textContent += msg + "\n";
+  }
+
+  function setStatus(kind, title, detail) {
+    statusEl.className = "status " + kind;
+    statusEl.textContent = title;
+    detailEl.textContent = detail;
+  }
+
+  function fnv1a(str) {
+    var h = 0x811C9DC5;
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return ("00000000" + h.toString(16)).slice(-8);
+  }
+
+  // Deterministic pattern: 16-char chunk repeated 524288 times = 8 MiB of chars.
+  var bigString;
+  var expected;
+  try {
+    bigString = "0123456789abcdef".repeat(BIG_SIZE / 16);
+    expected = fnv1a(bigString);
+    log("built pattern: " + bigString.length + " chars, fnv1a=" + expected);
+  } catch (e) {
+    setStatus("fail", "FAIL", "构造字符串失败: " + e.name + ": " + e.message);
+    return;
+  }
+
+  function readBack() {
+    try {
+      var value = localStorage.getItem(BIG_KEY);
+      var small = localStorage.getItem(SMALL_KEY);
+      if (value === null) {
+        setStatus("wait", "未写入",
+            "localStorage[\"" + BIG_KEY + "\"] 不存在。\n" +
+            "小 key small=" + JSON.stringify(small) + "\n" +
+            "点击按钮写入 8 MiB 后再观察是否抛 QuotaExceededError。");
+        log("read: big = null, small = " + JSON.stringify(small));
+        return;
+      }
+      var sum = fnv1a(value);
+      var ok = value.length === BIG_SIZE && sum === expected;
+      setStatus(ok ? "pass" : "fail", ok ? "PASS" : "FAIL",
+          "读取 localStorage[\"" + BIG_KEY + "\"]\n" +
+          "length = " + value.length + " (期望 " + BIG_SIZE + ")\n" +
+          "fnv1a  = " + sum + " (期望 " + expected + ")\n" +
+          "small  = " + JSON.stringify(small) + "\n" +
+          (ok ? "内容完整，校验一致。" : "内容不完整或校验不一致！"));
+      log("read: length=" + value.length + " fnv1a=" + sum + " ok=" + ok);
+    } catch (e) {
+      setStatus("fail", "FAIL",
+          "读取 localStorage 抛异常:\n" + e.name + ": " + e.message);
+      log("read exception: " + e.name + ": " + e.message);
+    }
+  }
+
+  document.getElementById("btn-write").addEventListener("click", function () {
+    try {
+      localStorage.setItem(BIG_KEY, bigString);
+      localStorage.setItem(SMALL_KEY, "ok");
+      log("setItem(big) + setItem(small) returned normally");
+      readBack();
+    } catch (e) {
+      setStatus("fail", "FAIL",
+          "写入 8 MiB 抛异常（这正是要观察的失败路径）:\n" +
+          e.name + ": " + e.message + "\n" +
+          "bigString.length = " + bigString.length + " chars");
+      log("write exception: " + e.name + ": " + e.message);
+    }
+  });
+
+  document.getElementById("btn-read").addEventListener("click", readBack);
+
+  document.getElementById("btn-clear").addEventListener("click", function () {
+    try {
+      localStorage.removeItem(BIG_KEY);
+      localStorage.removeItem(SMALL_KEY);
+      log("removed big + small");
+      setStatus("wait", "未写入", "已清除 localStorage[\"big\"] 和 [\"small\"]。");
+    } catch (e) {
+      setStatus("fail", "FAIL", "清除异常: " + e.name + ": " + e.message);
+    }
+  });
+
+  // On load: read whatever is already stored and display size + checksum.
+  readBack();
+})();
+</script>
+</body>
+</html>

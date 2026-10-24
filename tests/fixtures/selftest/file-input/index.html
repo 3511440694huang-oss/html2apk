@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fixture: file-input</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; background: #0B1020; color: #E8EEF9;
+         font-family: system-ui, -apple-system, sans-serif; }
+  h1 { font-size: 15px; color: #7F92B3; font-weight: 600; margin: 0 0 12px; }
+  .status { font-size: 44px; font-weight: 800; line-height: 1.1; text-align: center;
+            padding: 16px 20px; border-radius: 14px; background: #16203A;
+            border: 2px solid #2A3A5F; color: #FFD479; margin: 0 0 12px; }
+  .status.pass { color: #7FFFB2; background: #0F2A1D; border-color: #2F7D55; }
+  .status.fail { color: #FF9B9B; background: #2C1114; border-color: #8E3339; }
+  .detail { font-size: 14px; line-height: 1.65; color: #B9C7DE; white-space: pre-wrap;
+            word-break: break-word; margin: 0 0 16px; }
+  label.pick { display: block; text-align: center; min-height: 56px; line-height: 56px;
+               font-size: 17px; font-weight: 700; border-radius: 12px;
+               background: #1B2A4A; border: 1px solid #35507F; color: #DCE8FF;
+               margin: 0 0 16px; }
+  label.pick:active { background: #243B67; }
+  input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .file { border: 1px solid #223252; background: #101A30; border-radius: 10px;
+          padding: 12px; margin: 0 0 10px; }
+  .file .name { font-size: 15px; font-weight: 700; color: #CFE0FF; word-break: break-all; }
+  .file .meta { font-size: 12px; color: #7F92B3; margin: 4px 0 8px; }
+  .file .preview { font-family: ui-monospace, monospace; font-size: 11px; color: #9FB4D6;
+                   white-space: pre-wrap; word-break: break-all; max-height: 140px; overflow: auto; }
+  pre { margin: 14px 0 0; padding: 10px; background: #070B16; border: 1px solid #1C2740;
+        border-radius: 8px; color: #8FA3C4; font-size: 11px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <h1>HTML2APK fixture · file-input（.json / .txt / multiple）</h1>
+  <div id="status" class="status">未选择</div>
+  <div id="detail" class="detail">点下方按钮选择 1 个或多个 .json / .txt 文件；将用 FileReader 读取并显示名称、大小和开头内容。</div>
+
+  <label class="pick" for="picker">选择文件（可多选）</label>
+  <input id="picker" type="file" accept=".json,.txt,application/json" multiple>
+
+  <div id="files"></div>
+  <pre id="log"></pre>
+
+<script>
+(function () {
+  "use strict";
+
+  var statusEl = document.getElementById("status");
+  var detailEl = document.getElementById("detail");
+  var filesEl = document.getElementById("files");
+  var logEl = document.getElementById("log");
+  var picker = document.getElementById("picker");
+
+  function log(msg) {
+    logEl.textContent += msg + "\n";
+  }
+
+  function setStatus(kind, title, detail) {
+    statusEl.className = "status " + kind;
+    statusEl.textContent = title;
+    detailEl.textContent = detail;
+  }
+
+  function readText(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () { resolve(String(reader.result)); };
+      reader.onerror = function () { reject(reader.error || new Error("FileReader error")); };
+      reader.readAsText(file);
+    });
+  }
+
+  function addFileCard(file, text, error) {
+    var card = document.createElement("div");
+    card.className = "file";
+
+    var name = document.createElement("div");
+    name.className = "name";
+    name.textContent = file.name;
+
+    var meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = "size=" + file.size + " bytes · type=" + (file.type || "(空)") +
+        " · lastModified=" + file.lastModified;
+
+    var preview = document.createElement("div");
+    preview.className = "preview";
+    if (error) {
+      preview.textContent = "READ FAILED: " + error;
+    } else {
+      var head = text.slice(0, 160).replace(/\n/g, "\\n");
+      preview.textContent = "前 160 字符: " + head + (text.length > 160 ? " …" : "");
+    }
+
+    card.appendChild(name);
+    card.appendChild(meta);
+    card.appendChild(preview);
+    filesEl.appendChild(card);
+  }
+
+  picker.addEventListener("change", function () {
+    var files = Array.prototype.slice.call(picker.files || []);
+    filesEl.textContent = "";
+    logEl.textContent = "";
+
+    if (files.length === 0) {
+      setStatus("wait", "未选择", "没有选择任何文件。");
+      return;
+    }
+
+    setStatus("wait", "读取中", "已选择 " + files.length + " 个文件，正在用 FileReader 读取…");
+    log("selected " + files.length + " file(s)");
+
+    var jobs = files.map(function (file) {
+      return readText(file).then(function (text) {
+        addFileCard(file, text, null);
+        log("OK " + file.name + " (" + text.length + " chars)");
+        return { file: file, text: text };
+      }).catch(function (e) {
+        addFileCard(file, "", e.name + ": " + e.message);
+        log("FAIL " + file.name + ": " + e.name + ": " + e.message);
+        throw e;
+      });
+    });
+
+    Promise.all(jobs).then(function (results) {
+      var total = results.reduce(function (sum, r) { return sum + r.file.size; }, 0);
+      setStatus("pass", "PASS",
+          "读取成功 " + results.length + " 个文件，共 " + total + " bytes。\n" +
+          results.map(function (r) {
+            return r.file.name + " — " + r.text.length + " chars";
+          }).join("\n"));
+    }).catch(function () {
+      setStatus("fail", "FAIL", "至少一个文件读取失败，详情见下方卡片和日志。");
+    });
+  });
+
+  log("accept = " + picker.getAttribute("accept") + ", multiple = " + picker.multiple);
+})();
+</script>
+</body>
+</html>

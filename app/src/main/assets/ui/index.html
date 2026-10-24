@@ -10,22 +10,40 @@
 <body>
 <div class="app">
   <div class="brandbar">
-    <div class="name">HTML2APK<small>LOCAL APK FABRICATOR</small></div>
+    <div class="name">HTML2APK<small>LOCAL APK FABRICATOR · V1.2</small></div>
     <div class="mach">MACHINE&nbsp;01</div>
   </div>
   <div class="warn-strip">
     <span>⚠ 离线构建 · 数据不出设备</span>
-    <span class="eng"><i id="engLed" class="led off"></i><span id="engText">ENGINE CHECK</span></span>
+    <span class="eng"><i id="engLed" class="led off" aria-hidden="true"></i><span id="engText">ENGINE CHECK</span></span>
+  </div>
+
+  <div class="panel fault-panel" id="enginePanel" hidden>
+    <div class="panel-tag"><span class="code">[!]</span> ENGINE FAULT <span>引擎故障</span></div>
+    <div class="panel-body">
+      <p class="fault-title" id="engineErr">构建引擎未就绪</p>
+      <p class="fault-hint" id="engineHint" hidden></p>
+      <button type="button" class="btn small" id="recheckBtn">重新检测<span class="sub">RECHECK ENGINE</span></button>
+    </div>
   </div>
 
   <div class="panel">
     <div class="panel-tag"><span class="code">[01]</span> INPUT FEED <span>选择输入</span></div>
     <div class="panel-body">
       <div class="btn-row">
-        <button class="btn" id="pickFile">选择 HTML 文件<span class="sub">SINGLE FILE</span></button>
-        <button class="btn" id="pickDir">选择文件夹<span class="sub">DIRECTORY</span></button>
+        <button type="button" class="btn" id="pickFile">选择 HTML 文件<span class="sub">SINGLE FILE</span></button>
+        <button type="button" class="btn" id="pickDir">选择文件夹<span class="sub">DIRECTORY</span></button>
       </div>
-      <div class="path" id="pathBox" hidden><span id="pathText"></span><span class="x" id="clearPath">✕ 清除</span></div>
+      <div class="path" id="pathBox" hidden>
+        <span class="path-name" id="pathText"></span>
+        <button type="button" class="x" id="clearPath">✕ 清除</button>
+      </div>
+      <div class="field entry-field" id="entryField" hidden>
+        <label for="entrySelect">入口文件 <i>ENTRY HTML</i></label>
+        <select id="entrySelect"></select>
+        <div class="hint">作为生成的 App 首页；多页面时请选择正确的入口</div>
+      </div>
+      <div class="warn-list" id="warnList" hidden></div>
     </div>
   </div>
 
@@ -55,11 +73,33 @@
         <label for="iconBtn">封面图标 <i>OPTIONAL</i></label>
         <div class="icon-row">
           <img id="iconPreview" class="icon-preview" alt="icon" hidden>
-          <button class="btn small" id="iconBtn">选择图片<span class="sub">COVER IMAGE</span></button>
-          <button class="btn small ghost" id="iconClear" hidden>恢复默认<span class="sub">RESET</span></button>
+          <button type="button" class="btn small" id="iconBtn">选择图片<span class="sub">COVER IMAGE</span></button>
+          <button type="button" class="btn small ghost" id="iconClear" hidden>恢复默认<span class="sub">RESET</span></button>
         </div>
         <div class="hint">上传一张图片作为 APK 桌面图标，建议正方形；不选则使用默认图标</div>
       </div>
+
+      <details class="adv" id="advBox">
+        <summary>
+          <span>高级选项 <i>ADVANCED</i></span>
+          <span class="chev" aria-hidden="true">＋</span>
+        </summary>
+        <div class="adv-body">
+          <label class="check-row" for="debugMode">
+            <input type="checkbox" id="debugMode">
+            <span class="check-txt">调试模式 <i>DEBUG</i></span>
+          </label>
+          <p class="adv-hint">开启后，生成的 APK 会显示页面脚本错误，便于排查；正式发布建议关闭。</p>
+          <div class="field">
+            <label for="orientation">屏幕方向 <i>ORIENTATION</i></label>
+            <select id="orientation">
+              <option value="auto">自动 · AUTO</option>
+              <option value="portrait">竖屏 · PORTRAIT</option>
+              <option value="landscape">横屏 · LANDSCAPE</option>
+            </select>
+          </div>
+        </div>
+      </details>
     </div>
   </div>
 
@@ -69,11 +109,42 @@
       <div class="log-wrap">
         <div class="log" id="log"><span class="t">-- waiting for build --</span></div>
       </div>
+      <button type="button" class="dir-hint" id="outDirHint" hidden>
+        <span class="dh-label">输出目录 <i>OUTPUT</i></span>
+        <span class="dh-copy">复制 COPY</span>
+        <span class="dh-path" id="outDirPath"></span>
+      </button>
+    </div>
+  </div>
+
+  <div class="panel fault-panel" id="failPanel" hidden>
+    <div class="panel-tag"><span class="code">[04]</span> FAULT REPORT <span>构建失败</span></div>
+    <div class="panel-body">
+      <div class="result-stamp bad">
+        <div class="seal"><b>!</b>FAIL</div>
+        <div>
+          <h3 id="failMsg">构建失败</h3>
+          <p>BUILD ABORTED · 请按提示修正后重试</p>
+        </div>
+      </div>
+      <p class="fault-hint" id="failHint" hidden></p>
+      <div class="btn-row">
+        <button type="button" class="btn small" id="copyLogBtn">复制日志<span class="sub">COPY LOG</span></button>
+        <button type="button" class="btn small ghost" id="retryBtn">重试<span class="sub">RETRY</span></button>
+      </div>
+      <div class="log-path-hint" id="failLogPathHint" hidden>日志文件 <span id="failLogPath"></span></div>
+      <details class="log-details" id="failDetails">
+        <summary>
+          <span>完整构建日志 <i id="failLogMeta">FULL LOG</i></span>
+          <span class="chev" aria-hidden="true">▾</span>
+        </summary>
+        <pre class="fail-log" id="failLog">-</pre>
+      </details>
     </div>
   </div>
 
   <div class="panel" id="resultPanel" hidden>
-    <div class="panel-tag"><span class="code">[04]</span> FINAL OUTPUT <span>结果</span></div>
+    <div class="panel-tag"><span class="code">[05]</span> FINAL OUTPUT <span>结果</span></div>
     <div class="panel-body">
       <div class="result-stamp">
         <div class="seal"><b>OK</b>BUILD</div>
@@ -85,16 +156,23 @@
       <div class="kv"><span class="k">OUTPUT</span><span class="v" id="rPath">-</span></div>
       <div class="kv"><span class="k">SIZE</span><span class="v" id="rSize">-</span></div>
       <div class="kv"><span class="k">PKG</span><span class="v" id="rPkg">-</span></div>
-      <div style="height:12px"></div>
-      <button class="btn primary full" id="installBtn">安装 APK<span class="sub">INSTALL NOW</span></button>
+      <div class="kv"><span class="k">DURATION</span><span class="v" id="rDuration">-</span></div>
+      <div class="kv" id="rLogRow" hidden><span class="k">LOG</span><span class="v" id="rLog">-</span></div>
+      <p class="result-warn" id="rWarning" hidden></p>
+      <div class="spacer"></div>
+      <button type="button" class="btn primary full" id="installBtn">安装 APK<span class="sub">INSTALL NOW</span></button>
+      <div class="btn-row" id="resultActions">
+        <button type="button" class="btn small ghost" id="copyPathBtn">复制路径<span class="sub">COPY PATH</span></button>
+        <button type="button" class="btn small ghost" id="openDirBtn">打开目录<span class="sub">OPEN FOLDER</span></button>
+      </div>
     </div>
   </div>
 </div>
 
 <div class="dock">
-  <button class="btn primary full" id="buildBtn" disabled>EXECUTE BUILD</button>
+  <button type="button" class="btn primary full" id="buildBtn" disabled>EXECUTE BUILD</button>
 </div>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" aria-live="polite"></div>
 
 <script src="app.js"></script>
 </body>

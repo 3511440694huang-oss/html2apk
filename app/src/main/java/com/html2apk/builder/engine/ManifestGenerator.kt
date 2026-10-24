@@ -13,10 +13,15 @@ object ManifestGenerator {
 
     /** 生成 AndroidManifest.xml（文本形式，供 aapt2 link 使用） */
     fun generateManifest(tpl: File, cfg: BuildConfig2, dest: File): File {
-        val content = tpl.readText(Charsets.UTF_8)
-            .replace("__PACKAGE__", cfg.packageName)
+        var content = tpl.readText(Charsets.UTF_8)
+        content = content
+            .replace("__PACKAGE__", xmlAttr(cfg.packageName))
             .replace("__VERSION_CODE__", cfg.versionCode.toString())
-            .replace("__VERSION_NAME__", cfg.versionName)
+            .replace("__VERSION_NAME__", xmlAttr(cfg.versionName))
+        val left = Regex("__[A-Z_]+__").find(content)
+        if (left != null) {
+            throw IllegalStateException("Manifest 模板存在未替换的占位符: ${left.value}")
+        }
         dest.parentFile?.mkdirs()
         dest.writeText(content, Charsets.UTF_8)
         return dest
@@ -27,11 +32,20 @@ object ManifestGenerator {
         val valuesDir = File(resDir, "values")
         valuesDir.mkdirs()
         val f = File(valuesDir, "strings.xml")
-        // 转义 XML 特殊字符（元素文本中引号无需转义）
-        val escaped = appName
+        // 先按 Android string 资源规则转义（反斜杠/单引号/双引号），再做 XML 转义
+        var escaped = appName
+            .replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\"", "\\\"")
             .replace("&", "&amp;")
             .replace("<", "&lt;")
             .replace(">", "&gt;")
+            .replace("\r", " ")
+            .replace("\n", " ")
+        // 以 @ / ? 开头的字符串会被 aapt2 当作资源引用，转义成字面量
+        if (escaped.startsWith("@") || escaped.startsWith("?")) {
+            escaped = "\\" + escaped
+        }
         f.writeText(
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
                 "<resources>\n" +
@@ -49,33 +63,55 @@ object ManifestGenerator {
      * @return true = 使用了自定义图片，false = 默认图标
      */
     fun generateIconSet(resDir: File, iconPath: String?): Boolean {
-        val src = if (iconPath.isNullOrBlank()) null else try {
-            BitmapFactory.decodeFile(iconPath)
-        } catch (e: Exception) {
-            null
-        }
-        val square = src?.let { centerCrop(it) }
+        var src: Bitmap? = null
+        var square: Bitmap? = null
+        var custom = false
+        try {
+            src = if (iconPath.isNullOrBlank()) null else decodeSampled(iconPath, 1024)
+            square = src?.let { if (it.width == it.height) it else centerCrop(it) }
+            custom = square != null
 
-        // 标准 launcher 密度：mdpi48 / hdpi72 / xhdpi96 / xxhdpi144 / xxxhdpi192
-        val densities = mapOf(
-            "mdpi" to 48, "hdpi" to 72, "xhdpi" to 96,
-            "xxhdpi" to 144, "xxxhdpi" to 192
-        )
-        for ((density, size) in densities) {
-            val dir = File(File(resDir, "mipmap-$density"), "ic_launcher.png")
-            dir.parentFile?.mkdirs()
-            val bmp = if (square != null) Bitmap.createScaledBitmap(square, size, size, true)
-            else drawDefaultIcon(size)
-            dir.writeBytes(toPng(bmp))
+            // 标准 launcher 密度：mdpi48 / hdpi72 / xhdpi96 / xxhdpi144 / xxxhdpi192
+            val densities = linkedMapOf(
+                "mdpi" to 48, "hdpi" to 72, "xhdpi" to 96,
+                "xxhdpi" to 144, "xxxhdpi" to 192
+            )
+            for ((density, size) in densities) {
+                val target = File(File(resDir, "mipmap-$density"), "ic_launcher.png")
+                target.parentFile?.mkdirs()
+                val bmp = if (square != null) Bitmap.createScaledBitmap(square, size, size, true)
+                else drawDefaultIcon(size)
+                target.writeBytes(toPng(bmp))
+                if (bmp !== square) bmp.recycle()
+            }
+            // 无密度兜底（部分旧 launcher 直接查 mipmap/）
+            val base = File(File(resDir, "mipmap"), "ic_launcher.png")
+            base.parentFile?.mkdirs()
+            val bmpBase = if (square != null) Bitmap.createScaledBitmap(square, 48, 48, true)
+            else drawDefaultIcon(48)
+            base.writeBytes(toPng(bmpBase))
+            if (bmpBase !== square) bmpBase.recycle()
+        } catch (t: Throwable) {
+            // 超大/损坏图片不能拖垮整个构建：回退默认图标
+            custom = false
+            try {
+                if (square == null) {
+                    for ((density, size) in linkedMapOf("mdpi" to 48, "hdpi" to 72, "xhdpi" to 96, "xxhdpi" to 144, "xxxhdpi" to 192)) {
+                        val target = File(File(resDir, "mipmap-$density"), "ic_launcher.png")
+                        target.parentFile?.mkdirs()
+                        target.writeBytes(toPng(drawDefaultIcon(size)))
+                    }
+                }
+            } catch (_: Throwable) {
+            }
+        } finally {
+            try {
+                if (square != null && square !== src) square.recycle()
+                src?.recycle()
+            } catch (_: Throwable) {
+            }
         }
-        // 无密度兜底（部分旧 launcher 直接查 mipmap/）
-        val base = File(File(resDir, "mipmap"), "ic_launcher.png")
-        base.parentFile?.mkdirs()
-        val bmpBase = if (square != null) Bitmap.createScaledBitmap(square, 48, 48, true)
-        else drawDefaultIcon(48)
-        base.writeBytes(toPng(bmpBase))
-
-        return square != null
+        return custom
     }
 
     /**
@@ -84,13 +120,45 @@ object ManifestGenerator {
      */
     fun makePreviewDataUri(iconPath: String): String? {
         if (iconPath.isBlank()) return null
-        val src = try { BitmapFactory.decodeFile(iconPath) } catch (e: Exception) { null } ?: return null
-        val side = 128
-        val square = centerCrop(src)
-        val thumb = Bitmap.createScaledBitmap(square, side, side, true)
-        val bos = ByteArrayOutputStream()
-        thumb.compress(Bitmap.CompressFormat.PNG, 100, bos)
-        return "data:image/png;base64," + Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP)
+        var src: Bitmap? = null
+        var square: Bitmap? = null
+        var thumb: Bitmap? = null
+        return try {
+            src = decodeSampled(iconPath, 512) ?: return null
+            square = if (src.width == src.height) src else centerCrop(src)
+            thumb = Bitmap.createScaledBitmap(square, 128, 128, true)
+            val bos = ByteArrayOutputStream()
+            thumb.compress(Bitmap.CompressFormat.PNG, 100, bos)
+            "data:image/png;base64," + Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP)
+        } catch (t: Throwable) {
+            null
+        } finally {
+            try {
+                if (thumb != null && thumb !== square && thumb !== src) thumb.recycle()
+                if (square != null && square !== src) square.recycle()
+                src?.recycle()
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    private fun decodeSampled(path: String, maxSide: Int): Bitmap? {
+        return try {
+            val bounds = BitmapFactory.Options()
+            bounds.inJustDecodeBounds = true
+            BitmapFactory.decodeFile(path, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            var sample = 1
+            while (bounds.outWidth / sample > maxSide || bounds.outHeight / sample > maxSide) {
+                sample *= 2
+            }
+            val opts = BitmapFactory.Options()
+            opts.inSampleSize = sample
+            opts.inPreferredConfig = Bitmap.Config.ARGB_8888
+            BitmapFactory.decodeFile(path, opts)
+        } catch (t: Throwable) {
+            null
+        }
     }
 
     /** 中心裁剪为正方形 */
@@ -121,4 +189,11 @@ object ManifestGenerator {
         bmp.compress(Bitmap.CompressFormat.PNG, 100, bos)
         return bos.toByteArray()
     }
-}
+
+    private fun xmlAttr(value: String): String = value
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&apos;")
+    }
